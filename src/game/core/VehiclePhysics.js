@@ -17,8 +17,8 @@ export class VehiclePhysics {
     this.handbrakeDeceleration = 50.0;
     this.naturalDeceleration = 6.0; // rolling resistance
     this.maxSteerAngle = 0.58; // ~33 degrees
-    this.steerSpeed = 3.2;
-    this.steerReturnSpeed = 4.8;
+    this.steerSpeed = 3.8;
+    this.steerReturnSpeed = 5.2;
     this.wheelbase = 2.6; // distance between axles
 
     // Lateral grip and drift
@@ -31,14 +31,18 @@ export class VehiclePhysics {
     this.radius = 2.2; // bounding circle approximation for fast broadphase
   }
 
-  update(dt, input, collisionSystem) {
+  update(dt, input, collisionSystem, inputManager = null) {
     if (dt <= 0) return;
     dt = Math.min(dt, 0.1); // clamp delta time to prevent physics tunnel/explosion
 
-    // 1. Steering input handling
+    // 1. Steering input handling (buttons or analog joystick)
     let targetSteer = 0;
-    if (input.left) targetSteer += this.maxSteerAngle;
-    if (input.right) targetSteer -= this.maxSteerAngle;
+    if (inputManager && inputManager.hasAnalogSteer) {
+      targetSteer = inputManager.analogSteer * this.maxSteerAngle;
+    } else {
+      if (input.left) targetSteer += this.maxSteerAngle;
+      if (input.right) targetSteer -= this.maxSteerAngle;
+    }
 
     // Steering speed damping at high speeds
     const speedRatio = Math.min(Math.abs(this.speed) / this.maxForwardSpeed, 1.0);
@@ -52,9 +56,6 @@ export class VehiclePhysics {
     }
 
     // 2. Acceleration / Braking
-    const isMovingForward = this.speed > 0.1;
-    const isMovingBackward = this.speed < -0.1;
-
     if (input.handbrake) {
       // Handbrake active
       if (this.speed > 0) {
@@ -91,10 +92,8 @@ export class VehiclePhysics {
 
     // 3. Bicycle Model Yaw Update
     if (Math.abs(this.speed) > 0.05) {
-      // Angular velocity = (speed / wheelbase) * tan(steerAngle)
       let turnRate = (this.speed / this.wheelbase) * Math.tan(this.steerAngle);
       if (input.handbrake && Math.abs(this.speed) > 5.0) {
-        // Handbrake drift boost
         turnRate *= 1.6;
       }
       this.heading += turnRate * dt;
@@ -121,7 +120,6 @@ export class VehiclePhysics {
       const collisionResult = collisionSystem.checkAndResolve(this.position, nextPos, this.radius);
       if (collisionResult.collided) {
         this.position.copy(collisionResult.resolvedPosition);
-        // Reduce speed upon impact and simulate bounce/rebound
         this.speed *= -0.35;
       } else {
         this.position.copy(nextPos);
