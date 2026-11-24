@@ -61,8 +61,9 @@ export class Car {
       metalness: 0.9
     });
 
-    this.headlightMaterial = new THREE.MeshBasicMaterial({ color: 0xe0f2fe });
+    this.headlightMaterial = new THREE.MeshBasicMaterial({ color: 0x93c5fd });
     this.taillightMaterial = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+    this.headlightsOn = false;
   }
 
   buildCarModel() {
@@ -257,5 +258,16 @@ export class Car {
     this.wheels.forEach(w => {
       w.rotator.rotation.x += angularSpeed * dt;
     });
+  }
+
+  setHeadlights(on) {
+    this.headlightsOn = on;
+    if (on) {
+      this.headlightMaterial.color.set(0xffffff);
+      this.taillightMaterial.color.set(0xff2222);
+    } else {
+      this.headlightMaterial.color.set(0x93c5fd);
+      this.taillightMaterial.color.set(0x991b1b);
+    }
   }
 }

@@ -277,12 +277,20 @@ export class AutomotiveHUD {
           <div class="hud-badge">
             <button class="hud-action-btn" onclick="window.__UML_MODALS__.openGarage()">Garage</button>
             <button class="hud-action-btn" onclick="window.__UML_MODALS__.openDealership()">Dealer</button>
+            <button class="hud-action-btn" onclick="window.__UML_MODALS__.openCarMeet()">Meet</button>
             <button class="hud-action-btn" onclick="window.__UML_MODALS__.openInputSettings()">Controls</button>
             <button class="hud-action-btn" onclick="window.__UML_MODALS__.openSettings()">Graphics</button>
+            <button class="hud-action-btn" id="hud-audio-btn" onclick="window.__UML_ENGINE__?.toggleAudio()">🔊</button>
           </div>
         </div>
-        <div class="hud-badge" id="hud-diag-badge">
-          <span style="font-size: 10px; color:#94a3b8;">F3 Diag</span>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <div class="hud-badge">
+            <span id="hud-time-icon">☀️</span>
+            <span id="hud-time-text" style="font-size: 11px; font-weight:700; color:#f8fafc;">10:00 AM</span>
+          </div>
+          <div class="hud-badge" id="hud-diag-badge">
+            <span style="font-size: 10px; color:#94a3b8;">F3 Diag</span>
+          </div>
         </div>
       </div>
 
@@ -340,9 +348,12 @@ export class AutomotiveHUD {
     this.fuelFillEl = this.container.querySelector('#hud-fuel-fill');
     this.brakeEl = this.container.querySelector('#hud-brake');
     this.moneyEl = this.container.querySelector('#hud-money');
+    this.timeTextEl = this.container.querySelector('#hud-time-text');
+    this.timeIconEl = this.container.querySelector('#hud-time-icon');
+    this.audioBtnEl = this.container.querySelector('#hud-audio-btn');
   }
 
-  update(physics, input, vehicleData, money) {
+  update(physics, input, vehicleData, money, dayNight = null, audioSystem = null) {
     const kmh = physics.getKmh();
     const gear = physics.getGear();
     const rpm = physics.getRpm();
@@ -367,6 +378,19 @@ export class AutomotiveHUD {
 
     if (money !== undefined) {
       this.moneyEl.textContent = `$${money.toLocaleString()}`;
+    }
+
+    if (dayNight && this.timeTextEl) {
+      this.timeTextEl.textContent = dayNight.getTimeString();
+      const period = dayNight.getPeriod();
+      if (period === 'morning') this.timeIconEl.textContent = '🌅';
+      else if (period === 'afternoon') this.timeIconEl.textContent = '☀️';
+      else if (period === 'evening') this.timeIconEl.textContent = '🌆';
+      else this.timeIconEl.textContent = '🌙';
+    }
+
+    if (audioSystem && this.audioBtnEl) {
+      this.audioBtnEl.textContent = audioSystem.isMuted() ? '🔇' : '🔊';
     }
 
     if (input.handbrake) {

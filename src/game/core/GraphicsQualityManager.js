@@ -19,7 +19,9 @@ export class GraphicsQualityManager {
         shadowMapSize: 512,
         maxLights: 1,
         detailsDistance: 80,
-        renderScale: 0.85
+        renderScale: 0.85,
+        traffic: 3,
+        pedestrians: 4
       },
       MEDIUM: {
         name: 'MEDIUM',
@@ -28,7 +30,9 @@ export class GraphicsQualityManager {
         shadowMapSize: 1024,
         maxLights: 2,
         detailsDistance: 140,
-        renderScale: 1.0
+        renderScale: 1.0,
+        traffic: 6,
+        pedestrians: 10
       },
       HIGH: {
         name: 'HIGH',
@@ -37,7 +41,9 @@ export class GraphicsQualityManager {
         shadowMapSize: 2048,
         maxLights: 3,
         detailsDistance: 220,
-        renderScale: 1.0
+        renderScale: 1.0,
+        traffic: 10,
+        pedestrians: 20
       }
     };
 
@@ -100,9 +106,15 @@ export class GraphicsQualityManager {
       }
     }
 
-    // 3. Environmental Detail toggles
+    // 3. Environmental Detail toggles & Entity Densities
     if (this.engine.environment) {
       this.engine.environment.setDetailLevel(presetKey);
+    }
+    if (this.engine.traffic && config.traffic !== undefined) {
+      this.engine.traffic.setDensity(config.traffic);
+    }
+    if (this.engine.pedestrians && config.pedestrians !== undefined) {
+      this.engine.pedestrians.setDensity(config.pedestrians);
     }
 
     // 4. Update Diagnostics Label

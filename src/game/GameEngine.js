@@ -11,6 +11,11 @@ import { EconomySystem } from './core/EconomySystem.js';
 import { FuelSystem } from './core/FuelSystem.js';
 import { Car } from './entities/Car.js';
 import { UrbanEnvironment } from './world/UrbanEnvironment.js';
+import { WorldPolish } from './world/WorldPolish.js';
+import { TrafficSystem } from './core/TrafficSystem.js';
+import { PedestrianSystem } from './core/PedestrianSystem.js';
+import { DayNightCycle } from './core/DayNightCycle.js';
+import { AudioSystem } from './core/AudioSystem.js';
 import { AutomotiveHUD } from './ui/AutomotiveHUD.js';
 import { ModalsManager } from './ui/ModalsManager.js';
 import { MobileTouchControls } from './ui/MobileTouchControls.js';
@@ -53,10 +58,10 @@ export class GameEngine {
 
     // 4. Scene Setup
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0f172a);
-    this.scene.fog = new THREE.FogExp2(0x0f172a, 0.005);
+    this.scene.background = new THREE.Color(0x87ceeb); // Daytime sky
+    this.scene.fog = new THREE.FogExp2(0x87ceeb, 0.004);
 
-    // 5. Lighting Setup (mobile optimized)
+    // 5. Lighting Setup
     this.setupLighting();
 
     // 6. Subsystems
@@ -64,9 +69,12 @@ export class GameEngine {
     this.collision = new CollisionSystem();
     this.physics = new VehiclePhysics();
     this.cameraController = new IsometricCamera(window.innerWidth / window.innerHeight);
+    this.audio = new AudioSystem();
+
     this.hud = new AutomotiveHUD(this);
     this.modals = new ModalsManager(this);
     window.__UML_MODALS__ = this.modals;
+    window.__UML_ENGINE__ = this;
 
     // 7. Mobile Touch Controls (Android / Mobile Responsive)
     this.touchControls = new MobileTouchControls(this);
@@ -76,8 +84,10 @@ export class GameEngine {
     this.input.onSwitchCamera = () => this.toggleCameraView();
     this.input.onEnterExitVehicle = () => this.handleInteractionKey();
 
-    // 8. World Environment & Car Entity
+    // 8. World Environment, World Polish & Player Car
     this.environment = new UrbanEnvironment(this.scene, this.collision);
+    this.worldPolish = new WorldPolish(this.scene, this.collision);
+
     this.car = new Car(this.currentVehicleData);
     this.scene.add(this.car.mesh);
 
@@ -87,15 +97,34 @@ export class GameEngine {
     this.car.update(this.physics, 0);
     this.cameraController.init(this.physics.position);
 
-    // 9. Graphics Quality Manager
+    // 9. Day / Night Cycle (Morning start, dynamic sky/fog/lighting)
+    this.dayNight = new DayNightCycle(this.scene, this.sunLight, this.hemiLight);
+    this.dayNight.onNightStart = () => {
+      this.car.setHeadlights(true);
+      if (this.traffic) this.traffic.setHeadlights(true);
+      if (this.worldPolish) this.worldPolish.setNightMode(true);
+    };
+    this.dayNight.onDayStart = () => {
+      this.car.setHeadlights(false);
+      if (this.traffic) this.traffic.setHeadlights(false);
+      if (this.worldPolish) this.worldPolish.setNightMode(false);
+    };
+
+    // 10. AI Traffic & Pedestrian Living Systems
+    this.traffic = new TrafficSystem(this.scene, this.collision);
+    this.pedestrians = new PedestrianSystem(this.scene);
+
+    // 11. Graphics Quality Manager
     this.graphicsQuality = new GraphicsQualityManager(this);
-    // On mobile devices, default to LOW or MEDIUM
     if (this.isMobile && !localStorage.getItem('uml_graphics_settings')) {
       this.graphicsQuality.currentPreset = 'LOW';
     }
     this.graphicsQuality.applyPreset(this.graphicsQuality.currentPreset);
 
-    // 10. Event Listeners
+    // 12. Audio Auto-Unlock on first user gesture
+    this.setupAudioUnlock();
+
+    // 13. Event Listeners
     this.onResize = this.onResize.bind(this);
     this.animate = this.animate.bind(this);
     window.addEventListener('resize', this.onResize);
@@ -114,8 +143,8 @@ export class GameEngine {
   }
 
   setupLighting() {
-    const hemiLight = new THREE.HemisphereLight(0x93c5fd, 0x1e293b, 0.75);
-    this.scene.add(hemiLight);
+    this.hemiLight = new THREE.HemisphereLight(0x93c5fd, 0x1e293b, 0.75);
+    this.scene.add(this.hemiLight);
 
     this.sunLight = new THREE.DirectionalLight(0xfff7ed, 1.5);
     this.sunLight.position.set(50, 80, 40);
@@ -134,9 +163,34 @@ export class GameEngine {
 
     this.scene.add(this.sunLight);
 
-    const fillLight = new THREE.DirectionalLight(0x60a5fa, 0.3);
-    fillLight.position.set(-50, 40, -40);
-    this.scene.add(fillLight);
+    this.fillLight = new THREE.DirectionalLight(0x60a5fa, 0.3);
+    this.fillLight.position.set(-50, 40, -40);
+    this.scene.add(this.fillLight);
+  }
+
+  setupAudioUnlock() {
+    const unlock = () => {
+      if (this.audio) {
+        this.audio.init();
+        this.audio.startAmbient();
+      }
+      window.removeEventListener('keydown', unlock);
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('touchstart', unlock);
+    };
+    window.addEventListener('keydown', unlock, { once: true });
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('touchstart', unlock, { once: true });
+  }
+
+  toggleAudio() {
+    if (this.audio) {
+      if (!this.audio._initialized) {
+        this.audio.init();
+        this.audio.startAmbient();
+      }
+      this.audio.setMuted(!this.audio.isMuted());
+    }
   }
 
   setupTestingHooks() {
@@ -149,6 +203,19 @@ export class GameEngine {
           isTouch: DeviceDetector.isTouchDevice(),
           isLandscape: DeviceDetector.isLandscape(),
           cameraMode: this.cameraController.viewMode
+        },
+        world: {
+          time: this.dayNight.getTimeString(),
+          period: this.dayNight.getPeriod(),
+          hours: Number(this.dayNight.getHours().toFixed(2)),
+          isNight: this.dayNight.isNight(),
+          trafficActive: this.traffic.getActiveCount ? this.traffic.getActiveCount() : 0,
+          pedestriansActive: this.pedestrians.getActiveCount ? this.pedestrians.getActiveCount() : 0
+        },
+        audio: {
+          initialized: this.audio._initialized,
+          muted: this.audio.isMuted(),
+          volume: this.audio.getVolume()
         },
         player: {
           x: Number(this.physics.position.x.toFixed(2)),
@@ -197,6 +264,10 @@ export class GameEngine {
       } else {
         document.exitFullscreen().catch(() => {});
       }
+    } else if (e.key === 'm' || e.key === 'M') {
+      this.toggleAudio();
+    } else if (e.key === 'h' || e.key === 'H') {
+      if (this.audio) this.audio.playHonk();
     }
   }
 
@@ -224,12 +295,14 @@ export class GameEngine {
     // 1. Garage Zone (0, -30)
     const dGarage = Math.hypot(pos.x - 0, pos.z - (-30));
     if (dGarage < 8.5) {
+      if (this.audio) this.audio.playUIClick();
       this.modals.openGarage();
       return;
     }
 
     // 2. Gas Station Zone (45, 0)
     if (this.fuelSystem.isAtGasStation(pos)) {
+      if (this.audio) this.audio.playUIClick();
       this.modals.openGasStation();
       return;
     }
@@ -237,7 +310,16 @@ export class GameEngine {
     // 3. Dealership Zone (0, 30)
     const dDealer = Math.hypot(pos.x - 0, pos.z - 30);
     if (dDealer < 8.5) {
+      if (this.audio) this.audio.playUIClick();
       this.modals.openDealership();
+      return;
+    }
+
+    // 4. Car Meet & Automotive Community Zone (75, 75)
+    const dMeet = Math.hypot(pos.x - 75, pos.z - 75);
+    if (dMeet < 14.0) {
+      if (this.audio) this.audio.playUIClick();
+      this.modals.openCarMeet();
       return;
     }
   }
@@ -253,6 +335,10 @@ export class GameEngine {
     this.car = new Car(this.currentVehicleData);
     this.scene.add(this.car.mesh);
     this.car.update(this.physics, 0);
+
+    if (this.dayNight && this.dayNight.isNight()) {
+      this.car.setHeadlights(true);
+    }
 
     this.saveProgress();
   }
@@ -281,21 +367,42 @@ export class GameEngine {
     // 1. Vehicle Physics with analog steer support
     this.physics.update(dt, inputState, this.collision, this.input);
 
-    // 2. Fuel System
+    // 2. Day / Night Cycle Progression & Lighting
+    this.dayNight.update(dt);
+
+    // 3. AI Traffic Simulation (distance culling, obstacle avoidance)
+    this.traffic.update(dt, this.physics.position);
+
+    // 4. Pedestrian NPC Simulation (sidewalk navigation, idle animations)
+    this.pedestrians.update(dt, this.physics.position);
+
+    // 5. Fuel System
     this.fuelSystem.update(dt, this.currentVehicleData, this.physics);
 
-    // 3. Visual Entity Update
+    // 6. Visual Entity Update
     this.car.update(this.physics, dt);
 
-    // 4. Isometric / Chase Camera Tracking
+    // 7. Isometric / Chase Camera Tracking
     this.cameraController.update(dt, this.physics.position, this.physics.speed, this.physics.heading);
 
-    // 5. Sun Light Anchor
+    // 8. Sun Light Anchor Follows Player
     this.sunLight.position.set(this.physics.position.x + 50, 80, this.physics.position.z + 40);
     this.sunLight.target.position.copy(this.physics.position);
     this.sunLight.target.updateMatrixWorld();
 
-    // 6. Interactive Zones Proximity Check
+    // 9. Procedural Audio Engine Update
+    if (this.audio) {
+      this.audio.updateEngineSound(
+        Math.abs(this.physics.speed),
+        this.physics.maxForwardSpeed,
+        this.physics.getRpm()
+      );
+      if (inputState.handbrake && Math.abs(this.physics.speed) > 6.0) {
+        this.audio.playBrakeSqueal(Math.min(1.0, Math.abs(this.physics.speed) / 20));
+      }
+    }
+
+    // 10. Interactive Zones Proximity Check
     const pos = this.physics.position;
     if (Math.hypot(pos.x - 0, pos.z - (-30)) < 8.5) {
       this.modals.showPrompt('Enter Garage [E]');
@@ -303,14 +410,23 @@ export class GameEngine {
       this.modals.showPrompt('Refuel at Gas Station [E]');
     } else if (Math.hypot(pos.x - 0, pos.z - 30) < 8.5) {
       this.modals.showPrompt('Enter Dealership [E]');
+    } else if (Math.hypot(pos.x - 75, pos.z - 75) < 14.0) {
+      this.modals.showPrompt('Join Car Meet [E]');
     } else {
       this.modals.hidePrompt();
     }
 
-    // 7. Update HUD
-    this.hud.update(this.physics, inputState, this.currentVehicleData, this.economy.getMoney());
+    // 11. Update HUD
+    this.hud.update(
+      this.physics,
+      inputState,
+      this.currentVehicleData,
+      this.economy.getMoney(),
+      this.dayNight,
+      this.audio
+    );
 
-    // 8. Auto-Save Timer
+    // 12. Auto-Save Timer
     const now = performance.now();
     if (now - this.lastAutoSave >= 15000) {
       this.saveProgress();
@@ -345,6 +461,10 @@ export class GameEngine {
     this.modals.dispose();
     this.touchControls.dispose();
     this.perfMonitor.dispose();
+    if (this.audio) this.audio.dispose();
+    if (this.traffic) this.traffic.dispose();
+    if (this.pedestrians) this.pedestrians.dispose();
+    if (this.worldPolish) this.worldPolish.dispose();
     this.renderer.dispose();
   }
 }

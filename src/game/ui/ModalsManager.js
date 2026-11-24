@@ -636,6 +636,104 @@ export class ModalsManager {
     this.engine.touchControls.applyPreferences();
   }
 
+  // G. CAR MEET & COMMUNITY MODAL
+  openCarMeet() {
+    this.activeModal = 'car_meet';
+    const vehicle = this.engine.currentVehicleData;
+    const playerMoney = this.engine.economy.getMoney();
+
+    const showcaseCars = [
+      { name: 'Scarlet GT Turbo', owner: 'Kenji', spec: 'Twin-Turbo • 480 HP • Carbon Aero', rep: '+120 Rep' },
+      { name: 'Midnight Stance S15', owner: 'Maya', spec: 'Camber -4° • Air Suspension • BBS Rims', rep: '+95 Rep' },
+      { name: 'Sunburst Drift Spec', owner: 'Daisuke', spec: 'Welded Diff • Angle Kit • 520 HP', rep: '+150 Rep' },
+      { name: 'Emerald Circuit R', owner: 'Elena', spec: 'Sequential Gearbox • Slick Tires', rep: '+140 Rep' }
+    ];
+
+    const carsListHtml = showcaseCars.map(c => `
+      <div class="uml-card-item">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom: 4px;">
+          <div style="font-weight: 700; font-size: 13px;">${c.name}</div>
+          <span style="font-size: 11px; color: #38bdf8; font-weight: 600;">${c.rep}</span>
+        </div>
+        <div style="font-size: 11px; color: #94a3b8; margin-bottom: 6px;">Owner: ${c.owner}</div>
+        <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 10px;">${c.spec}</div>
+        <button class="uml-btn secondary" style="width: 100%; font-size: 11px; padding: 6px;" onclick="alert('Inspected ${c.name}! Beautiful build details and clean engine bay.')">
+          Inspect Build
+        </button>
+      </div>
+    `).join('');
+
+    this.card.innerHTML = `
+      <div class="uml-modal-header">
+        <div class="uml-modal-title">
+          <span>Stance & Speed Car Meet</span>
+          <span style="font-size: 12px; color: #4ade80; font-weight: 600;">$${playerMoney.toLocaleString()}</span>
+        </div>
+        <button class="uml-close-btn" onclick="window.__UML_MODALS__.closeModal()">✕</button>
+      </div>
+
+      <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-weight: 700; font-size: 14px; color: #f8fafc;">Your Ride: ${vehicle.name}</div>
+            <div style="font-size: 11px; color: #94a3b8;">Color: ${vehicle.color} • Rim: ${vehicle.rimStyle || 'Chrome'} • Aero: ${vehicle.spoilerType || 'Stock'}</div>
+          </div>
+          <button class="uml-btn" onclick="window.__UML_MODALS__.showcasePlayerCar()">Showcase Ride (+ $350)</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <h4 style="font-size: 11px; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px;">Community Showcase</h4>
+        <div class="uml-grid" style="margin-bottom: 0;">
+          ${carsListHtml}
+        </div>
+      </div>
+
+      <div style="background: rgba(255, 255, 255, 0.04); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-weight: 700; font-size: 13px;">Street Sprint Challenge</div>
+            <div style="font-size: 11px; color: #94a3b8;">Hit 80 km/h in the city drag stretch to claim community reward!</div>
+          </div>
+          <button class="uml-btn" style="background: #e11d48;" onclick="window.__UML_MODALS__.startSpeedChallenge()">Start Sprint</button>
+        </div>
+      </div>
+
+      <div style="text-align: right; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 14px;">
+        <button class="uml-btn secondary" onclick="window.__UML_MODALS__.closeModal()">Leave Meet</button>
+      </div>
+    `;
+
+    this.backdrop.classList.add('active');
+  }
+
+  showcasePlayerCar() {
+    this.engine.economy.earn(350, 'Car Meet Showcase Reward');
+    if (this.engine.audio) this.engine.audio.playRefuel();
+    this.engine.saveProgress();
+    alert('Your car was showcased to the community crowd! Earned +$350.');
+    this.openCarMeet();
+  }
+
+  startSpeedChallenge() {
+    this.closeModal();
+    this.showPrompt('ACCELERATE! Reach 80 km/h for the prize!', 'GO');
+    const checkInterval = setInterval(() => {
+      if (this.engine.physics.getKmh() >= 80) {
+        clearInterval(checkInterval);
+        this.engine.economy.earn(1000, 'Street Sprint Challenge Win');
+        if (this.engine.audio) this.engine.audio.playRefuel();
+        this.engine.saveProgress();
+        this.showPrompt('CHALLENGE WON! +$1,000 Awarded!', 'WIN');
+        setTimeout(() => this.hidePrompt(), 3500);
+      }
+    }, 200);
+
+    setTimeout(() => {
+      clearInterval(checkInterval);
+    }, 15000);
+  }
+
   dispose() {
     window.removeEventListener('keydown', this.onKeyDown);
     if (this.container && this.container.parentNode) {
